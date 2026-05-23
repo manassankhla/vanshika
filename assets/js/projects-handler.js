@@ -90,10 +90,18 @@ class ProjectsHandler {
             const obj = {};
             const currentLine = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
             
+            let isEmptyRow = true;
             headers.forEach((header, index) => {
                 let val = currentLine[index] ? currentLine[index].trim().replace(/^"|"$/g, '') : '';
                 obj[header] = val;
+                if (val !== '') {
+                    isEmptyRow = false;
+                }
             });
+            
+            // Skip rows that are completely empty or missing a Project Name/ID
+            if (isEmptyRow || (!obj['ID'] && !obj['Name'])) continue;
+
             result.push(obj);
         }
         return result;
@@ -108,16 +116,18 @@ class ProjectsHandler {
         const isHomePage = fileName === '' || 
                            fileName === 'index.html' || 
                            path === '/' || 
+                           path.endsWith('/Vanshika_website/') || 
                            path.endsWith('/Vanshika/') || 
-                           path.endsWith('/Vanshika/index.html');
+                           path.includes('index.html') ||
+                           path.includes('index.php');
 
         if (isHomePage) {
             console.log('🏠 Rendering Featured Projects Slider');
             this.renderFeatured();
-        } else if (fileName.includes('projects.html')) {
+        } else if (fileName.includes('projects.html') || fileName.includes('projects.php')) {
             console.log('📂 Rendering All Projects Grid');
             this.renderAll();
-        } else if (fileName.includes('project-detail.html')) {
+        } else if (fileName.includes('project-detail.html') || fileName.includes('project-detail.php')) {
             console.log('📄 Rendering Project Details');
             this.renderDetail();
         }
@@ -130,16 +140,32 @@ class ProjectsHandler {
         // Force remove any manually placed spinner inside the container
         container.find('.spinner-border, .col-12').remove();
 
-        const featured = this.projects.filter(p => p.Is_Featured && p.Is_Featured.trim().toUpperCase() === 'TRUE');
+        let featured = this.projects.filter(p => p.Is_Featured && p.Is_Featured.trim().toUpperCase() === 'TRUE');
         
+        // Limit to 6 projects max
+        featured = featured.slice(0, 6);
+
         if (featured.length === 0) {
             container.html('<div class="col-12 text-center py-5"><p class="text-white">No featured projects found. Check your Google Sheet!</p></div>');
             return;
         }
 
+        let originalLength = featured.length;
+        const isSingle = originalLength === 1;
+
+        // Slick slider has a known bug with centerMode and centerPadding where it shows a blank space 
+        // during infinite loop reset if there are too few items (like 2, 3, or 4).
+        // Duplicating the items ensures there are enough real slides to scroll through smoothly.
+        if (originalLength > 1 && originalLength <= 4) {
+            featured = [...featured, ...featured];
+            if (featured.length <= 4) featured = [...featured, ...featured]; // If it was 2, make it 8
+        }
+
         let html = '';
         featured.forEach((project, index) => {
-            const num = (index + 1).toString().padStart(2, '0');
+            // Use modulo to keep the project numbers consistent (01, 02, 03, 04) even for duplicates
+            const realNum = (index % originalLength) + 1;
+            const num = realNum.toString().padStart(2, '0');
             html += this.getSliderItemHTML(project, num);
         });
 
@@ -149,12 +175,10 @@ class ProjectsHandler {
         if ($.fn.slick) {
             if (container.hasClass('slick-initialized')) container.slick('unslick');
             
-            const isSingle = featured.length === 1;
-            
             container.slick({
                 slidesToShow: 1,
                 slidesToScroll: 1,
-                centerMode: !isSingle, // Disable centerMode for single product
+                centerMode: !isSingle, // Enable centerMode to show next/prev slides
                 centerPadding: isSingle ? '0' : '22%', 
                 arrows: !isSingle, // Hide arrows if single
                 dots: false,
@@ -317,7 +341,7 @@ class ProjectsHandler {
                 <div class="portfolio-img-wrap">
                     <div class="portfolio-bg" style="background-image: url('${p.Main_Image}')"></div>
                     <div class="portfolio-overlay"></div>
-                    <a href="project-detail.html?id=${p.ID}" class="portfolio-slide-link" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5;"></a>
+                    <a href="project-detail.php?id=${p.ID}" class="portfolio-slide-link" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5;"></a>
                     <div class="portfolio-content">
                         <div class="port-num">${num}</div>
                         <div class="port-text">
@@ -344,7 +368,7 @@ class ProjectsHandler {
                             <div class="project-info">
                                 <span class="category">${p.Category}</span>
                                 <h4>${p.Name}</h4>
-                                <a href="project-detail.html?id=${p.ID}" class="view-project-btn">View Project</a>
+                                <a href="project-detail.php?id=${p.ID}" class="view-project-btn">View Project</a>
                             </div>
                         </div>
                     </div>
